@@ -1558,6 +1558,7 @@ export function handleEvent(
       show: (title, options) => toast.info(title, options),
       openSession: openSessionFromToast,
     })
+    playSoundForEvent("permission", useUIStore.getState(), isViewed)
   }
 
   if (payload.type === "permission.replied") {
@@ -1611,7 +1612,11 @@ export function handleEvent(
     const storeState = getDirectoryEventState(store, batch)
     const session = storeState.session.find((s) => s.id === sessionID)
     if (session && (session as { parentID?: string }).parentID) {
-      // subtask - skip notification
+      // subtask - skip notification, but still play the subtask sound if enabled
+      if (sessionID) {
+        const subtaskIsViewed = isViewedInCurrentSession(resolvedDirectory, sessionID)
+        playSoundForEvent("subtask", useUIStore.getState(), subtaskIsViewed)
+      }
     } else if (sessionID) {
       const isViewed = isViewedInCurrentSession(resolvedDirectory, sessionID)
       appendNotification({
