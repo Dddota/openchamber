@@ -550,6 +550,7 @@ const materializeAuthoritativeUiSettings = (settings: DesktopSettings): DesktopS
     notificationSoundEnabled: defaults.notificationSoundEnabled,
     notificationSoundVolume: defaults.notificationSoundVolume,
     notificationSoundEventSounds: defaults.notificationSoundEventSounds,
+    notificationSoundFocusOnly: defaults.notificationSoundFocusOnly,
     summarizeLastMessage: defaults.summarizeLastMessage,
     summaryThreshold: defaults.summaryThreshold,
     summaryLength: defaults.summaryLength,
@@ -717,6 +718,9 @@ const applyDesktopUiPreferences = (settings: DesktopSettings) => {
   }
   if (settings.notificationSoundEventSounds && typeof settings.notificationSoundEventSounds === 'object') {
     store.setNotificationSoundEventSounds(settings.notificationSoundEventSounds);
+  }
+  if (typeof settings.notificationSoundFocusOnly === 'boolean' && settings.notificationSoundFocusOnly !== store.notificationSoundFocusOnly) {
+    store.setNotificationSoundFocusOnly(settings.notificationSoundFocusOnly);
   }
   if (typeof settings.summarizeLastMessage === 'boolean' && settings.summarizeLastMessage !== store.summarizeLastMessage) {
     store.setSummarizeLastMessage(settings.summarizeLastMessage);
@@ -1243,6 +1247,9 @@ const sanitizeWebSettings = (payload: unknown): DesktopSettings | null => {
   }
   if (typeof candidate.notifyOnPermission === 'boolean') {
     result.notifyOnPermission = candidate.notifyOnPermission;
+  }
+  if (typeof candidate.notificationSoundFocusOnly === 'boolean') {
+    result.notificationSoundFocusOnly = candidate.notificationSoundFocusOnly;
   }
   if (candidate.notificationTemplates && typeof candidate.notificationTemplates === 'object') {
     const templates = candidate.notificationTemplates as Record<string, unknown>;

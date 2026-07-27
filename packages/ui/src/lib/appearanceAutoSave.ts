@@ -23,6 +23,7 @@ type AppearanceSlice = {
   notifyOnError: boolean;
   notifyOnQuestion: boolean;
   notifyOnPermission: boolean;
+  notificationSoundFocusOnly: boolean;
   notificationTemplates: {
     completion: { title: string; message: string };
     error: { title: string; message: string };
@@ -79,6 +80,7 @@ export const startAppearanceAutoSave = (): void => {
     notifyOnError: useUIStore.getState().notifyOnError,
     notifyOnQuestion: useUIStore.getState().notifyOnQuestion,
     notifyOnPermission: useUIStore.getState().notifyOnPermission,
+    notificationSoundFocusOnly: useUIStore.getState().notificationSoundFocusOnly,
     notificationTemplates: useUIStore.getState().notificationTemplates,
     summarizeLastMessage: useUIStore.getState().summarizeLastMessage,
     summaryThreshold: useUIStore.getState().summaryThreshold,
@@ -122,6 +124,7 @@ export const startAppearanceAutoSave = (): void => {
       notifyOnError: state.notifyOnError,
       notifyOnQuestion: state.notifyOnQuestion,
       notifyOnPermission: state.notifyOnPermission,
+      notificationSoundFocusOnly: state.notificationSoundFocusOnly,
       notificationTemplates: state.notificationTemplates,
       summarizeLastMessage: state.summarizeLastMessage,
       summaryThreshold: state.summaryThreshold,
@@ -200,6 +203,9 @@ export const startAppearanceAutoSave = (): void => {
     }
     if (current.notifyOnPermission !== previous.notifyOnPermission) {
       diff.notifyOnPermission = current.notifyOnPermission;
+    }
+    if (current.notificationSoundFocusOnly !== previous.notificationSoundFocusOnly) {
+      diff.notificationSoundFocusOnly = current.notificationSoundFocusOnly;
     }
     if (JSON.stringify(current.notificationTemplates) !== JSON.stringify(previous.notificationTemplates)) {
       diff.notificationTemplates = current.notificationTemplates;
