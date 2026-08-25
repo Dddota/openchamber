@@ -360,6 +360,24 @@ describe('settings helpers', () => {
       expect(helpers.sanitizeSettingsUpdate({ notificationSoundEnabled: 1 })).toEqual({});
     });
 
+    it('round-trips notifyOnPermission boolean through sanitizeSettingsUpdate', () => {
+      const helpers = createTestHelpers();
+
+      expect(helpers.sanitizeSettingsUpdate({ notifyOnPermission: true })).toEqual({
+        notifyOnPermission: true,
+      });
+      expect(helpers.sanitizeSettingsUpdate({ notifyOnPermission: false })).toEqual({
+        notifyOnPermission: false,
+      });
+    });
+
+    it('rejects non-boolean notifyOnPermission values', () => {
+      const helpers = createTestHelpers();
+
+      expect(helpers.sanitizeSettingsUpdate({ notifyOnPermission: 'yes' })).toEqual({});
+      expect(helpers.sanitizeSettingsUpdate({ notifyOnPermission: 1 })).toEqual({});
+    });
+
     it('clamps notificationSoundVolume to [0, 1]', () => {
       const helpers = createTestHelpers();
 
@@ -435,11 +453,13 @@ describe('settings helpers', () => {
         notificationSoundVolume: 0.7,
         notificationSoundEventSounds: { completion: 'pack-bipbop/completion' },
         notificationSoundFocusOnly: false,
+        notifyOnPermission: false,
       });
       expect(response.notificationSoundEnabled).toBe(true);
       expect(response.notificationSoundVolume).toBe(0.7);
       expect(response.notificationSoundEventSounds).toEqual({ completion: 'pack-bipbop/completion' });
       expect(response.notificationSoundFocusOnly).toBe(false);
+      expect(response.notifyOnPermission).toBe(false);
     });
   });
 
