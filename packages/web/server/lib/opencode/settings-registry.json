@@ -120,10 +120,17 @@
     "agentWebToolEnabled": {
       "scope": "instance"
     },
+    "browserProvider": {
+      "scope": "instance"
+    },
     "agentMemoryToolEnabled": {
       "scope": "instance"
     },
     "agentMemoryFeatureAvailable": {
+      "scope": "instance",
+      "computed": true
+    },
+    "routingFeatureAvailable": {
       "scope": "instance",
       "computed": true
     },
@@ -208,13 +215,17 @@
     "sidebarProjectDisplayMode": {
       "scope": "profile"
     },
-    "sidebarSessionGroupingMode": {
-      "scope": "profile"
+    "sidebarViewMode": {
+      "scope": "profile",
+      "perSurface": true
     },
     "sidebarProjectSortOrder": {
       "scope": "profile"
     },
     "sidebarShowRecentSection": {
+      "scope": "profile"
+    },
+    "workStatusSectionOrder": {
       "scope": "profile"
     },
     "workStatusPanelEnabled": {
@@ -620,6 +631,10 @@
       "scope": "device",
       "local": true
     },
+    "contextEditorVisible": {
+      "scope": "device",
+      "local": true
+    },
     "contextEditorTreeWidth": {
       "scope": "device",
       "local": true
@@ -629,6 +644,10 @@
       "local": true
     },
     "workStatusExpandedSections": {
+      "scope": "device",
+      "local": true
+    },
+    "messageQueueExpanded": {
       "scope": "device",
       "local": true
     },

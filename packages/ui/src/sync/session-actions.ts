@@ -45,6 +45,7 @@ import { messagesBefore, messagesFrom } from "./message-ordering"
 import { deleteChatDirectory } from "@/lib/chatDirectories"
 import { createChatDraftIdentity } from "@/lib/chatDraftPersistence"
 import { cancelSessionTitleGeneration } from "./session-title-generation"
+import { recordSessionActionFailure } from "./session-action-failures"
 
 const MESSAGE_REFETCH_LIMIT = 100
 const SEND_CONFIRMATION_REFETCH_LIMIT = 30
@@ -456,7 +457,8 @@ export type SessionLiveActivity = "unknown" | "idle" | "active"
  * Absence of a non-idle status is not proof of idleness. Child stores are
  * evicted for background directories, and the global status index keeps only
  * non-idle entries, so "no report" and "idle" are different answers: report
- * "idle" only when a child store actually covers the session's directory.
+ * "idle" only after a live idle event or successful status snapshot covers
+ * the session's own directory. A loaded session list is not status authority.
  */
 export function getSessionLiveActivity(sessionId: string): SessionLiveActivity {
   const stores = _childStores
@@ -473,15 +475,16 @@ export function getSessionLiveActivity(sessionId: string): SessionLiveActivity {
   if (useGlobalSessionStatusStore.getState().statusById.has(sessionId)) return "active"
 
   if (!stores) return "unknown"
-  return isSessionCoveredByChildStore(sessionId, stores) ? "idle" : "unknown"
+  return hasAuthoritativeIdleCoverage(sessionId, stores) ? "idle" : "unknown"
 }
 
-function isSessionCoveredByChildStore(sessionId: string, stores: ChildStoreManager): boolean {
-  if (findSessionDirectoryInChildStores(sessionId)) return true
+function hasAuthoritativeIdleCoverage(sessionId: string, stores: ChildStoreManager): boolean {
   const directory = useSessionUIStore.getState().getDirectoryForSession(sessionId)
     ?? resolveKnownSessionDirectory(sessionId)
+    ?? findSessionDirectoryInChildStores(sessionId)
   if (!directory) return false
-  return stores.children.has(normalizePath(directory) ?? directory)
+  const state = stores.getChild(directory)?.getState()
+  return state?.sessionStatusReady === true || state?.session_status[sessionId]?.type === "idle"
 }
 
 function resolveKnownSessionDirectory(sessionId: string): string | null {
@@ -579,11 +582,19 @@ function getGlobalSessionSnapshot(sessionId: string): Session | null {
   return [...global.activeSessions, ...global.archivedSessions].find((session) => session.id === sessionId) ?? null
 }
 
+const toError = (error: unknown): Error => (error instanceof Error ? error : new Error(String(error)))
+
 function getSessionDirectory(sessionId: string): string | undefined {
+  // The global record carries the directory the server filed the session
+  // under, so it wins. Directory stores come second: a project root's store
+  // also indexes status, permissions and questions for sessions that live in
+  // that project's worktrees, so a lookup there can name the root for a
+  // worktree session and the server then answers 404/500 for the mutation.
   const globalSession = getGlobalSessionSnapshot(sessionId)
-  return findSessionDirectoryInChildStores(sessionId)
+  const globalDirectory = globalSession ? resolveGlobalSessionDirectory(globalSession) ?? undefined : undefined
+  return globalDirectory
+    || findSessionDirectoryInChildStores(sessionId)
     || useSessionUIStore.getState().getDirectoryForSession(sessionId)
-    || (globalSession ? resolveGlobalSessionDirectory(globalSession) ?? undefined : undefined)
     || dir()
 }
 
@@ -891,8 +902,10 @@ export async function createSession(
   parentID?: string | null,
   metadata?: Record<string, unknown>,
   selectionTransition?: "submitted-draft",
+  navigation: "open" | "preserve" = "open",
 ): Promise<Session | null> {
   const runtimeKey = getRuntimeKey()
+  const runtimeClient = opencodeClient.getSdkClient()
   try {
     // Capture the effective directory used for session creation so we can fall
     // back to it when the server response omits the `directory` field.
@@ -906,7 +919,7 @@ export async function createSession(
       metadata,
     }, effectiveDirectory)
 
-    if (getRuntimeKey() !== runtimeKey) return null
+    if (getRuntimeKey() !== runtimeKey || opencodeClient.getSdkClient() !== runtimeClient) return null
     const sessionDirectory = (session as { directory?: string | null }).directory ?? effectiveDirectory ?? null
     // Pre-populate routing index so SSE events arriving before session.created
     // can be routed to the correct child store
@@ -923,7 +936,7 @@ export async function createSession(
       }
       getImperativeSessionMessageLoader()?.initializeCreatedSession({ directory: sessionDirectory, sessionID: session.id })
     }
-    useSessionUIStore.getState().setCurrentSession(session.id, sessionDirectory, selectionTransition)
+    if (navigation === "open") useSessionUIStore.getState().setCurrentSession(session.id, sessionDirectory, selectionTransition)
     useSessionUIStore.getState().markSessionAsOpenChamberCreated(session.id)
     useGlobalSessionsStore.getState().upsertSession(session)
     return session
@@ -1244,6 +1257,7 @@ export async function deleteSession(sessionId: string, options?: DeleteSessionOp
     return true
   } catch (error) {
     console.error("[session-actions] deleteSession failed", error)
+    recordSessionActionFailure(sessionId, toError(error))
     // The server cascade-deletes child sessions when the parent is removed.
     // Subsequent delete attempts for those children return 404; treat as
     // success since the session was already deleted by the cascade.
@@ -1357,6 +1371,7 @@ export async function archiveSession(sessionId: string, expectedRuntimeKey = get
     return true
   } catch (error) {
     console.error("[session-actions] archiveSession failed", error)
+    recordSessionActionFailure(sessionId, toError(error))
     return false
   }
 }
@@ -1572,6 +1587,7 @@ export async function unarchiveSession(sessionId: string, expectedRuntimeKey = g
     return true
   } catch (error) {
     console.error("[session-actions] unarchiveSession failed", error)
+    recordSessionActionFailure(sessionId, toError(error))
     return false
   }
 }
@@ -1793,7 +1809,9 @@ export async function optimisticSend(input: {
     agent: input.agent ?? "",
     model: `${input.providerID}/${input.modelID}`,
     metadata: {} as Record<string, unknown>,
-    time: { created: Date.now(), completed: 0 },
+    // A user message never completes a turn; only assistant messages carry
+    // `time.completed`, and readers treat its presence as "turn finished".
+    time: { created: Date.now() },
   } as unknown as Message
 
   // Insert into store + register in shadow Map (for mergeOptimisticPage cleanup)
@@ -2039,11 +2057,9 @@ export async function dismissPermission(
  * PermissionNotFoundError also clears the stale entry from the child store via
  * {@link dismissPermission}.
  *
- * NOTE: rejecting unblocks the agent's tool but does NOT end its turn. Callers
- * that need to send the next message right away (the chat send path) must also
- * queue the message so the OpenCode runner reaches `idle` — otherwise the new
- * prompt arrives while the run is still active and is discarded by the runner's
- * `ensureRunning`.
+ * Rejecting unblocks the agent's tool without guaranteeing an idle session.
+ * The chat caller preserves explicit Steer as a direct send and queues other
+ * follow-ups after dismissal. This helper does not choose message delivery.
  */
 export async function dismissOpenPermissionsForSession(sessionId: string): Promise<boolean> {
   if (!sessionId) return false
@@ -2179,11 +2195,9 @@ export async function rejectQuestion(
  * QuestionNotFoundError also clears the stale entry from the child store via
  * {@link rejectQuestion}.
  *
- * NOTE: rejecting unblocks the agent's tool but does NOT end its turn. Callers
- * that need to send the next message right away (the chat send path) must also
- * abort the session so the OpenCode runner reaches `idle` — otherwise the new
- * prompt arrives while the run is still active and is discarded by the runner's
- * `ensureRunning`.
+ * Rejecting unblocks the agent's tool without guaranteeing an idle session.
+ * The chat caller preserves explicit Steer as a direct send and queues other
+ * follow-ups after dismissal. This helper does not abort the session.
  *
  * A successful reject clears the local store deterministically (see
  * {@link rejectQuestion}) so a lost `question.rejected` SSE event cannot leave
