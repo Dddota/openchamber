@@ -1184,7 +1184,7 @@ interface UIStore {
   setNotifyOnCompletion: (value: boolean) => void;
   setNotifyOnError: (value: boolean) => void;
   setNotifyOnQuestion: (value: boolean) => void;
-setNotifyOnPermission: (value: boolean) => void;
+  setNotifyOnPermission: (value: boolean) => void;
   setNotificationTemplates: (
     templates: UIStore['notificationTemplates'] | ((current: UIStore['notificationTemplates']) => UIStore['notificationTemplates']),
   ) => void;
@@ -2694,7 +2694,7 @@ export const useUIStore = create<UIStore>()(
         setNotifyOnCompletion: (value) => { set({ notifyOnCompletion: value }); },
         setNotifyOnError: (value) => { set({ notifyOnError: value }); },
         setNotifyOnQuestion: (value) => { set({ notifyOnQuestion: value }); },
-setNotifyOnPermission: (value) => { set({ notifyOnPermission: value }); },
+        setNotifyOnPermission: (value) => { set({ notifyOnPermission: value }); },
         setNotificationTemplates: (templates) => {
           set((state) => ({
             notificationTemplates: typeof templates === 'function'
